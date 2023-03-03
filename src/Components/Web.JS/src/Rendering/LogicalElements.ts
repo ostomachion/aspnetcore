@@ -31,6 +31,7 @@
 const logicalChildrenPropname = createSymbolOrFallback('_blazorLogicalChildren');
 const logicalParentPropname = createSymbolOrFallback('_blazorLogicalParent');
 const logicalEndSiblingPropname = createSymbolOrFallback('_blazorLogicalEnd');
+const isDeclarativeShadowPropname = createSymbolOrFallback('_blazorIsDeclarativeShadow');
 
 export function toLogicalRootCommentElement(start: Comment, end: Comment): LogicalElement {
   // Now that we support start/end comments as component delimiters we are going to be setting up
@@ -164,6 +165,35 @@ export function getLogicalSiblingEnd(element: LogicalElement): LogicalElement | 
 
 export function getLogicalChild(parent: LogicalElement, childIndex: number): LogicalElement {
   return getLogicalChildrenArray(parent)[childIndex];
+}
+
+
+export function attachDeclarativeShadow(parent: Element, init : ShadowRootInit) : LogicalElement | null {
+  // This element is a declarative shadow DOM. Try to attach it.
+  let shadowRoot : ShadowRoot;
+  if (parent.shadowRoot && isDeclarativeShadowPropname in parent.shadowRoot) {
+    // If the parent already has a declaratively-created shadow root, its contents should be replaced
+    // by this template element's contents. Note that attachShadow will do the right thing for
+    // 'real' declaratively-created shadow roots that didn't come from Blazor. We have to manage our
+    // own manually or attachShadow will throw.
+    shadowRoot = parent.shadowRoot;
+    shadowRoot.replaceChildren();
+  }
+
+  try {
+    shadowRoot = parent.attachShadow(init);
+  } catch {
+    // If this throws, either because the parent element isn't allowed to have a shadow root
+    // or the parent already has an imperatively-created shadow root, then create a template
+    // element instead.
+    return null;
+  }
+
+  const shadowRootAsLogicalElement = shadowRoot as unknown as LogicalElement;
+  shadowRootAsLogicalElement[logicalParentPropname] = parent;
+  shadowRootAsLogicalElement[logicalChildrenPropname] = [];
+
+  return shadowRootAsLogicalElement;
 }
 
 // SVG elements support `foreignObject` children that can hold arbitrary HTML.

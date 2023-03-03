@@ -3,7 +3,7 @@
 
 import { RenderBatch, ArrayBuilderSegment, RenderTreeEdit, RenderTreeFrame, EditType, FrameType, ArrayValues } from './RenderBatch/RenderBatch';
 import { EventDelegator } from './Events/EventDelegator';
-import { LogicalElement, PermutationListEntry, toLogicalElement, insertLogicalChild, removeLogicalChild, getLogicalParent, getLogicalChild, createAndInsertLogicalContainer, isSvgElement, getLogicalChildrenArray, getLogicalSiblingEnd, permuteLogicalChildren, getClosestDomElement, emptyLogicalElement } from './LogicalElements';
+import { LogicalElement, PermutationListEntry, toLogicalElement, insertLogicalChild, removeLogicalChild, getLogicalParent, getLogicalChild, createAndInsertLogicalContainer, isSvgElement, getLogicalChildrenArray, getLogicalSiblingEnd, permuteLogicalChildren, getClosestDomElement, emptyLogicalElement, attachDeclarativeShadow } from './LogicalElements';
 import { applyCaptureIdToElement } from './ElementReferenceCapture';
 import { attachToEventDelegator as attachNavigationManagerToEventDelegator } from '../Services/NavigationManager';
 const deferredValuePropname = '_blazorDeferredValue';
@@ -207,7 +207,11 @@ export class BrowserRenderer {
     const frameType = frameReader.frameType(frame);
     switch (frameType) {
       case FrameType.element:
-        this.insertElement(batch, componentId, parent, childIndex, frames, frame, frameIndex);
+        // This may be a template element that should be declaratively shadow DOM
+        if (!this.attachDeclarativeShadowRoot(batch, componentId, parent, frames, frame, frameIndex)) {
+          // If we're here, it wasn't. Insert a normal element
+          this.insertElement(batch, componentId, parent, childIndex, frames, frame, frameIndex);
+        }
         return 1;
       case FrameType.text:
         this.insertText(batch, parent, childIndex, frame);
@@ -313,6 +317,86 @@ export class BrowserRenderer {
     function isBlazorSelectElement(selectElem: HTMLSelectElement | null) : selectElem is BlazorHtmlSelectElement {
       return !!selectElem && (deferredValuePropname in selectElem);
     }
+  }
+
+  private attachDeclarativeShadowRoot(batch: RenderBatch, componentId: number, parent: LogicalElement, frames: ArrayValues<RenderTreeFrame>, frame: RenderTreeFrame, frameIndex: number) : boolean {
+    const frameReader = batch.frameReader;
+    const tagName = frameReader.elementName(frame)!;
+
+    if (tagName !== 'template') {
+      return false;
+    }
+
+    // Must have an Element for a parent
+    // Follows the spec, with the addition that a shadow root can't be inserted if it has no parent
+    // element in its component definition.
+    if (!(parent instanceof Element)) {
+      return false;
+    }
+
+    let attached = false;
+
+    let mode : 'open' | 'closed' | null = null;
+    let delegatesFocus: boolean = false;
+    const descendantsEndIndexExcl = frameIndex + frameReader.subtreeLength(frame);
+    for (let descendantIndex = frameIndex + 1; descendantIndex < descendantsEndIndexExcl; descendantIndex++) {
+      const descendantFrame = batch.referenceFramesEntry(frames, descendantIndex);
+      if (frameReader.frameType(descendantFrame) === FrameType.attribute) {
+        const attributeName = frameReader.attributeName(descendantFrame)!;
+        switch (attributeName) {
+          case 'shadowrootmode': {
+            const attributeValue = frameReader.attributeValue(descendantFrame)!
+            if (attributeValue === 'open' || attributeValue == 'closed') {
+              mode = attributeValue;
+            } else {
+              // The element has a shadowrootmode attribute, but with an invalid value
+              return false;
+            }
+            break;
+          }
+          case 'shadowrootdelegatesfocus': {
+            delegatesFocus = true;
+            break;
+          }
+        }
+      }
+      else {
+        // As soon as we see a non-attribute child, all the subsequent child frames are
+        // not attributes. If we did not find a shadowrootmode attribute, then this is
+        // not a declarative shadow DOM.
+
+        if (mode === null) {
+          // We didn't find a shadowrootmode attribute
+          return false;
+        }
+
+        const shadowRoot = attachDeclarativeShadow(parent, { mode, delegatesFocus, slotAssignment: 'named' });
+        if (shadowRoot === null) {
+          return false;
+        }
+        
+        attached = true;
+
+        // Insert the remnants as children of the shadow root
+        this.insertFrameRange(batch, componentId, shadowRoot, 0, frames, descendantIndex, descendantsEndIndexExcl);
+        break;
+      }
+    }
+
+    if (mode === null) {
+      // We didn't find a shadowrootmode attribute
+      return false;
+    }
+    
+    // The template did not have any children, so the shadow isn't attached yet
+    if (!attached) {
+      const shadowRoot = attachDeclarativeShadow(parent, { mode, delegatesFocus, slotAssignment: 'named' });
+      if (shadowRoot === null) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private insertComponent(batch: RenderBatch, parent: LogicalElement, childIndex: number, frame: RenderTreeFrame) {
