@@ -167,31 +167,36 @@ export function getLogicalChild(parent: LogicalElement, childIndex: number): Log
   return getLogicalChildrenArray(parent)[childIndex];
 }
 
-
-export function attachDeclarativeShadow(parent: Element, init : ShadowRootInit) : LogicalElement | null {
-  // This element is a declarative shadow DOM. Try to attach it.
-  let shadowRoot : ShadowRoot;
-  if (parent.shadowRoot && isDeclarativeShadowPropname in parent.shadowRoot) {
-    // If the parent already has a declaratively-created shadow root, its contents should be replaced
-    // by this template element's contents. Note that attachShadow will do the right thing for
-    // 'real' declaratively-created shadow roots that didn't come from Blazor. We have to manage our
-    // own manually or attachShadow will throw.
-    shadowRoot = parent.shadowRoot;
-    shadowRoot.replaceChildren();
+export function attachDeclarativeShadowRoot(host: LogicalElement, mode: ShadowRootMode, delegatesFocus: boolean, childIndex: number) : LogicalElement | null {
+  if (!(host instanceof Element)) {
+    throw new Error('Shadow roots can only be attached to Elements.');
   }
 
+  // This element is a declarative shadow DOM. Try to attach it.
+  let shadowRoot : ShadowRoot;
+  if (host.shadowRoot && isDeclarativeShadowPropname in host.shadowRoot) {
+    // If the host already has a declaratively-created shadow root, its contents should be replaced
+    // by this template element's contents. Note that attachShadow should do the right thing for
+    // 'real' declaratively-created shadow roots that didn't come from Blazor. We have to manage our
+    // own manually or attachShadow will throw.
+    shadowRoot = host.shadowRoot;
+    shadowRoot.replaceChildren();
+  } else {
   try {
-    shadowRoot = parent.attachShadow(init);
+      shadowRoot = host.attachShadow({ mode, delegatesFocus, slotAssignment: 'named' });
   } catch {
-    // If this throws, either because the parent element isn't allowed to have a shadow root
-    // or the parent already has an imperatively-created shadow root, then create a template
-    // element instead.
+      // This may throw because the host element isn't allowed to have a shadow root or the host
+      // already has an imperatively-created shadow root
+      // This is expected and the caller should create a normal template element instead
     return null;
+  }
   }
 
   const shadowRootAsLogicalElement = shadowRoot as unknown as LogicalElement;
-  shadowRootAsLogicalElement[logicalParentPropname] = parent;
+
+  shadowRootAsLogicalElement[logicalParentPropname] = host;
   shadowRootAsLogicalElement[logicalChildrenPropname] = [];
+  shadowRootAsLogicalElement[isDeclarativeShadowPropname] = true;
 
   return shadowRootAsLogicalElement;
 }
