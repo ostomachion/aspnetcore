@@ -207,6 +207,18 @@ export function attachDeclarativeShadowRoot(host: LogicalElement, mode: ShadowRo
 
   const shadowRootAsLogicalElement = shadowRoot as unknown as LogicalElement;
 
+  // Even though the shadow root acts like the first child in the DOM, we insert it
+  // as a LogicalELement in source order
+  // TODO: Not sure if this is the right thing to do though
+  const newSiblings = getLogicalChildrenArray(host);
+  if (childIndex < newSiblings.length) {
+    // Insert
+    newSiblings.splice(childIndex, 0, shadowRootAsLogicalElement);
+  } else {
+    // Append
+    newSiblings.push(shadowRootAsLogicalElement);
+  }
+
   shadowRootAsLogicalElement[logicalParentPropname] = host;
   shadowRootAsLogicalElement[logicalChildrenPropname] = [];
   shadowRootAsLogicalElement[isDeclarativeShadowPropname] = true;
