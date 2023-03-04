@@ -9,7 +9,29 @@ export function applyCaptureIdToElement(element: Element, referenceCaptureId: st
 
 function getElementByCaptureId(referenceCaptureId: string) {
   const selector = `[${getCaptureIdAttributeName(referenceCaptureId)}]`;
-  return document.querySelector(selector);
+  return querySelectorDeep(document, selector);
+}
+
+function querySelectorDeep(root: Document | DocumentFragment, selector: string) : Element | null {
+  // Note that this doesn't necessarily return the first matching element in document order, but
+  // that's okay since we're only using it for selectors that should only match a single element
+  const lightResult = root.querySelector(selector);
+  if (lightResult) {
+    return lightResult;
+  }
+
+  // Recursively query all shadow DOMS if it didn't match in the light DOM
+  const descendants = Array.from(root.querySelectorAll('*'));
+  for (const descendant of descendants) {
+    if (descendant.shadowRoot) {
+      const deepResult = querySelectorDeep(descendant.shadowRoot, selector);
+      if (deepResult) {
+        return deepResult;
+      }
+    }
+  }
+
+  return null;
 }
 
 function getCaptureIdAttributeName(referenceCaptureId: string) {
