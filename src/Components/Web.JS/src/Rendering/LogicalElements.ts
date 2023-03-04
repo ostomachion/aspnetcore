@@ -152,7 +152,20 @@ export function removeLogicalChild(parent: LogicalElement, childIndex: number): 
 
   // Finally, remove the node itself
   const domNodeToRemove = childToRemove as any as Node;
+  if (domNodeToRemove instanceof ShadowRoot) {
+    // There's no good way to actually remove a shadow root, but we can empty it
+    // and remove any logical element properties
+    domNodeToRemove.replaceChildren();
+    delete domNodeToRemove[logicalChildrenPropname];
+    delete domNodeToRemove[logicalParentPropname];
+    // Don't delete isDeclarativeShadowPropname because we still need to know that
+    // this shadow root was created declaratively
+    // TODO: This will cause problems if a shadow root is removed and we try to add
+    // a new shadow root with a different shadowrootmode
+  }
+  else {
   domNodeToRemove.parentNode!.removeChild(domNodeToRemove);
+}
 }
 
 export function getLogicalParent(element: LogicalElement): LogicalElement | null {
