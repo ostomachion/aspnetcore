@@ -57,6 +57,55 @@ const disableableEventNames = toLookup([
   'mouseup',
 ]);
 
+// Only considering events listed in Microsoft.AspNetCore.Components.Web
+const uncomposedEvents = [
+  'mouseleave',
+  'mouseenter',
+  'change',
+  'invalid',
+  'reset',
+  'select',
+  'selectstart',
+  'selectionchange',
+  'submit',
+  'pointerenter',
+  'pointerleave',
+  'canplay',
+  'canplaythrough',
+  'cuechange',
+  'durationchange',
+  'emptied',
+  'pause',
+  'play',
+  'playing',
+  'ratechange',
+  'seeked',
+  'seeking',
+  'stalled',
+  'stop',
+  'suspend',
+  'timeupdate',
+  'volumechange',
+  'waiting',
+  'loadstart',
+  'timeout',
+  'abort',
+  'load',
+  'loadend',
+  'progress',
+  'error',
+  'ended',
+  'loadeddata',
+  'loadedmetadata',
+  'pointerlockchange',
+  'pointerlockerror',
+  'readystatechange',
+  'scroll',
+  'toggle',
+];
+
+const UncomposedEventType = "blazor.uncomposed";
+
 // Responsible for adding/removing the eventInfo on an expando property on DOM elements, and
 // calling an EventInfoStore that deals with registering/unregistering the underlying delegated
 // event listeners as required (and also maps actual events back to the given callback).
@@ -72,6 +121,7 @@ export class EventDelegator {
   constructor(private browserRendererId: number) {
     const eventDelegatorId = ++EventDelegator.nextEventDelegatorId;
     this.eventsCollectionKey = `_blazorEvents_${eventDelegatorId}`;
+    document.addEventListener(UncomposedEventType, this.onGlobalEvent.bind(this));
     this.eventInfoStore = new EventInfoStore(this.onGlobalEvent.bind(this));
   }
 
@@ -130,6 +180,10 @@ export class EventDelegator {
   }
 
   private onGlobalEvent(evt: Event) {
+    if (evt.type === UncomposedEventType) {
+      evt = (evt as CustomEvent<UncomposedEventDetails>).detail.sourceEvent;
+    }
+
     if (!(evt.target instanceof Element)) {
       return;
     }
@@ -381,4 +435,31 @@ function eventIsDisabledOnElement(element: Element, rawBrowserEventName: string)
   return (element instanceof HTMLButtonElement || element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)
     && Object.prototype.hasOwnProperty.call(disableableEventNames, rawBrowserEventName)
     && element.disabled;
+}
+
+// Blazor relies on some non-composed events being captured by the document
+// Since these are encapsulated by the shadow DOM, we dispatch a new event that carries information
+// about the original event so that Blazor can do what it needs to with the event handler
+export function addUncomposedEvents(shadowRoot: ShadowRoot) {
+  for (var type of uncomposedEvents) {
+    // To make delegation work with non-bubbling events, register a 'capture' listener.
+    // We preserve the non-bubbling behavior by only dispatching such events to the targeted element.
+    const useCapture = Object.prototype.hasOwnProperty.call(nonBubblingEvents, type);
+    shadowRoot.addEventListener(type, e => {
+      if (!e.composed) {
+        shadowRoot.dispatchEvent(new CustomEvent<UncomposedEventDetails>(UncomposedEventType, {
+          bubbles: true,
+          composed: true,
+          cancelable: false,
+          detail: {
+            sourceEvent: e
+          }
+        }));
+      }
+    }, useCapture);
+  }
+}
+
+interface UncomposedEventDetails {
+  sourceEvent: Event;
 }

@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+import { addUncomposedEvents } from "./Events/EventDelegator";
+
 /*
   A LogicalElement plays the same role as an Element instance from the point of view of the
   API consumer. Inserting and removing logical elements updates the browser DOM just the same.
@@ -164,8 +166,8 @@ export function removeLogicalChild(parent: LogicalElement, childIndex: number): 
     // a new shadow root with a different shadowrootmode
   }
   else {
-  domNodeToRemove.parentNode!.removeChild(domNodeToRemove);
-}
+    domNodeToRemove.parentNode!.removeChild(domNodeToRemove);
+  }
 }
 
 export function getLogicalParent(element: LogicalElement): LogicalElement | null {
@@ -195,15 +197,17 @@ export function attachDeclarativeShadowRoot(host: LogicalElement, mode: ShadowRo
     shadowRoot = host.shadowRoot;
     shadowRoot.replaceChildren();
   } else {
-  try {
+    try {
       shadowRoot = host.attachShadow({ mode, delegatesFocus, slotAssignment: 'named' });
-  } catch {
+    } catch {
       // This may throw because the host element isn't allowed to have a shadow root or the host
       // already has an imperatively-created shadow root
       // This is expected and the caller should create a normal template element instead
-    return null;
+      return null;
+    }
   }
-  }
+
+  addUncomposedEvents(shadowRoot);
 
   const shadowRootAsLogicalElement = shadowRoot as unknown as LogicalElement;
 
