@@ -438,11 +438,47 @@ export class BrowserRenderer {
     // First see if we have special handling for this attribute
     if (!this.tryApplySpecialProperty(batch, toDomElement, attributeName, attributeFrame)) {
       // If not, treat it as a regular string-valued attribute
-      toDomElement.setAttribute(
-        attributeName,
-        frameReader.attributeValue(attributeFrame)!
-      );
+      const attributeValue = frameReader.attributeValue(attributeFrame)!;
+      const parts = attributeName.split(':');
+      if (parts.length === 2) {
+        if (parts[0] === 'xmlns') {
+          // We're defining a namespace
+          console.log(`defining namespace ${parts[1]} = ${attributeValue}`)
+          toDomElement.setAttributeNS(
+            'http://www.w3.org/2000/xmlns/',
+            attributeName,
+            attributeValue.toLowerCase()
+          );
+        } else {
+          // A namespace-prefixed attribute
+          const namespaceURI = BrowserRenderer.getNamespaceURI(toDomElement, parts[0]);
+          console.log(`namespace attribute ${namespaceURI} ${parts[1]} = ${attributeValue}`);
+          toDomElement.setAttributeNS(
+            namespaceURI,
+            attributeName.toLowerCase(),
+            attributeValue.toLowerCase()
+          );
+        }
+      } else {
+        // Regular attribute with no namespace
+        toDomElement.setAttribute(
+          attributeName,
+          attributeValue
+        );
+      }
     }
+  }
+
+  private static getNamespaceURI(element: Element, prefix: string) : string | null {
+    let current : Element | null = element;
+    do {
+      const attr = Array.from(element.attributes).filter(a => a.name === `xmlns:${prefix}` && a.namespaceURI === 'http://www.w3.org/2000/xmlns/');
+      if (attr.length) {
+        return attr[0].value;
+      }
+      current = current.parentElement;
+    } while (current);
+    return null;
   }
 
   private tryApplySpecialProperty(batch: RenderBatch, element: Element, attributeName: string, attributeFrame: RenderTreeFrame | null) {
