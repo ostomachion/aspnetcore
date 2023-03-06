@@ -443,7 +443,6 @@ export class BrowserRenderer {
       if (parts.length === 2) {
         if (parts[0] === 'xmlns') {
           // We're defining a namespace
-          console.log(`defining namespace ${parts[1]} = ${attributeValue}`)
           toDomElement.setAttributeNS(
             'http://www.w3.org/2000/xmlns/',
             attributeName,
@@ -452,7 +451,6 @@ export class BrowserRenderer {
         } else {
           // A namespace-prefixed attribute
           const namespaceURI = BrowserRenderer.getNamespaceURI(toDomElement, parts[0]);
-          console.log(`namespace attribute ${namespaceURI} ${parts[1]} = ${attributeValue}`);
           toDomElement.setAttributeNS(
             namespaceURI,
             attributeName.toLowerCase(),
