@@ -439,24 +439,14 @@ export class BrowserRenderer {
     if (!this.tryApplySpecialProperty(batch, toDomElement, attributeName, attributeFrame)) {
       // If not, treat it as a regular string-valued attribute
       const attributeValue = frameReader.attributeValue(attributeFrame)!;
-      const parts = attributeName.split(':');
+      const parts = attributeName.split('|');
       if (parts.length === 2) {
-        if (parts[0] === 'xmlns') {
-          // We're defining a namespace
+          // Special syntax to set a namespaced attribute: namespace|name="value"
           toDomElement.setAttributeNS(
-            'http://www.w3.org/2000/xmlns/',
-            attributeName,
+            parts[0],
+            parts[1],
             attributeValue.toLowerCase()
           );
-        } else {
-          // A namespace-prefixed attribute
-          const namespaceURI = BrowserRenderer.getNamespaceURI(toDomElement, parts[0]);
-          toDomElement.setAttributeNS(
-            namespaceURI,
-            attributeName.toLowerCase(),
-            attributeValue.toLowerCase()
-          );
-        }
       } else {
         // Regular attribute with no namespace
         toDomElement.setAttribute(
