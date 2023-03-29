@@ -244,15 +244,30 @@ export class BrowserRenderer {
     const frameReader = batch.frameReader;
     const tagName = frameReader.elementName(frame)!;
 
+    const options : ElementCreationOptions = {};
+    
+    // Check for an 'is' attribute so that the element can be created correctly.
+    const descendantsEndIndexExcl = frameIndex + frameReader.subtreeLength(frame);
+    for (let descendantIndex = frameIndex + 1; descendantIndex < descendantsEndIndexExcl; descendantIndex++) {
+      const descendantFrame = batch.referenceFramesEntry(frames, descendantIndex);
+      if (frameReader.frameType(descendantFrame) === FrameType.attribute) {
+        if (frameReader.attributeName(descendantFrame) === 'is') {
+          options.is = frameReader.attributeValue(descendantFrame) ?? undefined;
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+
     const newDomElementRaw = (tagName === 'svg' || isSvgElement(parent)) ?
-      document.createElementNS('http://www.w3.org/2000/svg', tagName) :
-      document.createElement(tagName);
+      document.createElementNS('http://www.w3.org/2000/svg', tagName, options) :
+      document.createElement(tagName, options);
     const newElement = toLogicalElement(newDomElementRaw);
 
     let inserted = false;
 
     // Apply attributes
-    const descendantsEndIndexExcl = frameIndex + frameReader.subtreeLength(frame);
     for (let descendantIndex = frameIndex + 1; descendantIndex < descendantsEndIndexExcl; descendantIndex++) {
       const descendantFrame = batch.referenceFramesEntry(frames, descendantIndex);
       if (frameReader.frameType(descendantFrame) === FrameType.attribute) {
@@ -455,18 +470,6 @@ export class BrowserRenderer {
         );
       }
     }
-  }
-
-  private static getNamespaceURI(element: Element, prefix: string) : string | null {
-    let current : Element | null = element;
-    do {
-      const attr = Array.from(element.attributes).filter(a => a.name === `xmlns:${prefix}` && a.namespaceURI === 'http://www.w3.org/2000/xmlns/');
-      if (attr.length) {
-        return attr[0].value;
-      }
-      current = current.parentElement;
-    } while (current);
-    return null;
   }
 
   private tryApplySpecialProperty(batch: RenderBatch, element: Element, attributeName: string, attributeFrame: RenderTreeFrame | null) {
