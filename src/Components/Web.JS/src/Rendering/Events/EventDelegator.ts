@@ -102,6 +102,7 @@ const uncomposedEvents = [
   'readystatechange',
   'scroll',
   'toggle',
+  'slotchange',
 ];
 
 const UncomposedEventType = "blazor.uncomposed";
